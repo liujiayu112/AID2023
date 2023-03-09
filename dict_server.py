@@ -9,6 +9,7 @@ from multiprocessing import Process
 import signal
 import sys
 from mysql import *
+from time import sleep
 
 # 全局变量
 HOST = '0.0.0.0'
@@ -28,11 +29,53 @@ def do_register(c, data):
     name = tmp[1]
     passwd = tmp[2]
     # 返回 True 表示成功，False 表示失败
-    if db.register(name,passwd):
+    if db.register(name, passwd):
         c.send(b'OK')
     else:
         c.send(b'Fail')
 
+
+def do_login(c, data):
+    tmp = data.split(' ')
+    name = tmp[1]
+    passwd = tmp[2]
+    if db.login(name, passwd):
+        c.send(b'OK')
+    else:
+        c.send(b"Fail")
+
+
+# 查单词
+def do_query(c, data):
+    tmp = data.split(' ')
+    name = tmp[1]
+    word = tmp[2]
+
+    # 插入历史记录
+    db.insert_hist(name, word)
+
+    # 查单词，没找到返回 None，找到返回单词解释
+    mean = db.query(word)
+    if not mean:
+        c.send("没有该单词！".encode())
+    else:
+        msg = "%s : %s" % (word, mean)
+        c.send(msg.encode())
+
+
+def do_hist(c, data):
+    name = data.split(' ')[1]
+    r = db.history(name)  # 数据库处理
+    if not r:
+        c.send(b'Fail')
+        return
+    c.send(b'OK')
+    for i in r:
+        msg = "%s %-16s %s" % i  # 左对齐，占 16 个宽度
+        sleep(0.1)
+        c.send(msg.encode())
+    sleep(0.1)
+    c.send(b'##')  # 发送结束
 
 
 def request(c):
@@ -44,8 +87,16 @@ def request(c):
     while True:
         data = c.recv(1024).decode()
         print(c.getpeername(), " : ", data)
-        if data[0] == 'R':
+        if not data or data[0] == 'E':
+            sys.exit()  # 对应的子进程退出
+        elif data[0] == 'R':
             do_register(c, data)
+        elif data[0] == 'L':
+            do_login(c, data)
+        elif data[0] == 'Q':
+            do_query(c, data)
+        elif data[0] == 'H':
+            do_hist(c, data)
 
 
 def main():

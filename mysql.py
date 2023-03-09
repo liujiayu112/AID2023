@@ -6,6 +6,9 @@
 """
 
 import pymysql
+import hashlib
+
+SALT = "#&aAid_"  # 盐
 
 
 class Database:
@@ -60,6 +63,13 @@ class Database:
         r = self.cur.fetchone()
         if r:
             return False  # 用户存在
+
+        # 密码加密存储处理
+        hash = hashlib.md5((name + SALT).encode())  # 算法加盐
+        hash.update(passwd.encode())
+        passwd = hash.hexdigest()
+
+        # 插入数据库
         sql = "insert into user (name,passwd) values (%s,%s)"
         try:
             self.cur.execute(sql, [name, passwd])
@@ -68,3 +78,60 @@ class Database:
         except Exception:
             self.db.rollback()
             return False
+
+    def login(self, name, passwd):
+        """
+        登录操作
+        :param name: 用户名
+        :param passwd: 用户密码
+        :return: True，False
+        """
+        hash = hashlib.md5((name + SALT).encode())  # 算法加盐
+        hash.update(passwd.encode())
+        passwd = hash.hexdigest()
+
+        # 数据库查找
+        sql = "select * from user where name='%s' and passwd = '%s'" % (name, passwd)
+        self.cur.execute(sql)
+        r = self.cur.fetchone()
+        # 有数据运行登录
+        if r:
+            return True
+        else:
+            return False
+
+    def query(self, word):
+        """
+        查单词
+        :param word: 单词
+        :return: 返回单词解释
+        """
+        sql = "select mean from words where word='%s'" % word
+        self.cur.execute(sql)
+        r = self.cur.fetchone()
+        # 如果找到 r --> (mean)
+        if r:
+            return r[0]
+
+    def insert_hist(self, name, word):
+        """
+        插入数据
+        :param name: 用户名
+        :param word: 单词名称
+        """
+        sql = "insert into history(name,word) values (%s,%s)"
+        try:
+            self.cur.execute(sql, [name, word])
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+
+    def history(self,name):
+        """
+        历史记录查询
+        :param name: 用户名
+        :return:
+        """
+        sql = "select name,word,time from history where name='%s' order by time desc limit 10" % name
+        self.cur.execute(sql)
+        return self.cur.fetchall()
